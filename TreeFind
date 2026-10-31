@@ -1,0 +1,178 @@
+if not game:IsLoaded() then game.Loaded:Wait() end
+ 
+local Players = game:GetService("Players")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local player = Players.LocalPlayer
+ 
+_G.SearchRunning = _G.SearchRunning or false
+local searching = false
+local foundGroups = {}
+ 
+local gui = Instance.new("ScreenGui")
+gui.Name = "BlackPartFinder"
+gui.ResetOnSpawn = false
+gui.Parent = player:WaitForChild("PlayerGui")
+ 
+local button = Instance.new("TextButton")
+button.Name = "ToggleButton"
+button.Size = UDim2.new(0, 120, 0, 45)
+button.Position = UDim2.new(1, -140, 1, -65)
+button.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextSize = 18
+button.Font = Enum.Font.GothamBold
+button.Text = _G.SearchRunning and "Stop" or "Start"
+button.Parent = gui
+ 
+local tpListFrame = Instance.new("ScrollingFrame")
+tpListFrame.Name = "TPList"
+tpListFrame.Size = UDim2.new(0, 200, 0, 250)
+tpListFrame.Position = UDim2.new(0, 20, 1, -270)
+tpListFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+tpListFrame.BorderSizePixel = 0
+tpListFrame.ScrollBarThickness = 6
+tpListFrame.Visible = false
+tpListFrame.Parent = gui
+ 
+local uiLayout = Instance.new("UIListLayout")
+uiLayout.Parent = tpListFrame
+uiLayout.Padding = UDim.new(0, 5)
+ 
+local function serverHop()
+    local x = pcall(function()
+        local servers = {}
+        local req = http_request or request or syn.request
+        if req then
+            local res = req({
+                Url = string.format("https://roblox.com", game.PlaceId),
+                Method = "GET"
+            })
+            local body = HttpService:JSONDecode(res.Body)
+            if body and body.data then
+                for _, v in pairs(body.data) do
+                    if type(v) == "table" and v.maxPlayers and v.playing and v.maxPlayers > v.playing and v.id ~= game.JobId then
+                        table.insert(servers, v.id)
+                    end
+                end
+            end
+        end
+        if #servers > 0 then
+            if queue_on_teleport then
+                queue_on_teleport([[
+                    _G.SearchRunning = true
+                    task.wait(1)
+                    loadstring(game:HttpGet("https://pastebin.com"))()
+                ]])
+            end
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, servers[math.random(1, #servers)], player)
+        else
+            button.Text = "Start"
+            _G.SearchRunning = false
+        end
+    end)
+    if not x then
+        task.wait(2)
+        serverHop()
+    end
+end
+ 
+local function createTPButton(part)
+    tpListFrame.Visible = true
+    local tpBtn = Instance.new("TextButton")
+    tpBtn.Size = UDim2.new(1, 0, 0, 35)
+    tpBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    tpBtn.TextColor3 = Color3.new(1, 1, 1)
+    tpBtn.Font = Enum.Font.Gotham
+    tpBtn.TextSize = 14
+ 
+    if part.Material == Enum.Material.SmoothPlastic then
+        tpBtn.Text = "TP to Spook"
+    elseif part.Material == Enum.Material.Granite then
+        tpBtn.Text = "TP to Sinister"
+    end
+ 
+    tpBtn.MouseButton1Click:Connect(function()
+        local character = player.Character or player.CharacterAdded:Wait()
+        local root = character:WaitForChild("HumanoidRootPart", 5)
+        if root and part then
+            root.CFrame = part.CFrame + Vector3.new(0, 5, 0)
+        end
+    end)
+ 
+    tpBtn.Parent = tpListFrame
+    tpListFrame.CanvasSize = UDim2.new(0, 0, 0, uiLayout.AbsoluteContentSize.Y)
+end
+ 
+local function scanServer()
+    local foundAny = false
+    for _, object in ipairs(workspace:GetDescendants()) do
+        if object:IsA("BasePart") then
+            local isBlack = (object.Color == Color3.new(0, 0, 0) or object.Color == Color3.fromRGB(0,0,0))
+            local validMaterial = (object.Material == Enum.Material.SmoothPlastic or object.Material == Enum.Material.Granite)
+ 
+            if isBlack and validMaterial then
+                local group = object:FindFirstAncestorOfClass("Model") or object.Parent
+ 
+                if not foundGroups[group] then
+                    foundGroups[group] = true
+                    createTPButton(object)
+ 
+                    if not foundAny then
+                        local character = player.Character or player.CharacterAdded:Wait()
+                        local root = character:WaitForChild("HumanoidRootPart", 5)
+                        if root then
+                            root.CFrame = object.CFrame + Vector3.new(0, 5, 0)
+                        end
+                        foundAny = true
+                    end
+                end
+            end
+        end
+    end
+    return foundAny
+end
+ 
+local function search()
+    if searching then return end
+    searching = true
+ 
+    while _G.SearchRunning do
+        button.Text = "Stop"
+        local matchFound = scanServer()
+ 
+        if matchFound then
+            _G.SearchRunning = false
+            button.Text = "Start"
+            break
+        else
+            button.Text = "Hopping..."
+            task.wait(1)
+            serverHop()
+            break
+        end
+        task.wait(1)
+    end
+ 
+    searching = false
+end
+ 
+button.MouseButton1Click:Connect(function()
+    if _G.SearchRunning then
+        _G.SearchRunning = false
+        button.Text = "Start"
+    else
+        _G.SearchRunning = true
+        button.Text = "Stop"
+        for _, child in ipairs(tpListFrame:GetChildren()) do
+            if child:IsA("TextButton") then child:Destroy() end
+        end
+        foundGroups = {}
+        tpListFrame.Visible = false
+        task.spawn(search)
+    end
+end)
+ 
+if _G.SearchRunning then
+    task.spawn(search)
+end
